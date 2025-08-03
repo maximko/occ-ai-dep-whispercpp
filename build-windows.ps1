@@ -42,7 +42,7 @@ if ($env:BUILD_WITH_ACCEL -eq "cpu") {
 }
 
 # configure
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_AVX2=OFF -DGGML_BMI2=OFF -DWHISPER_NO_AVX2=ON @cmakeArgs
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release @cmakeArgs
 
 cmake --build build --config Release
 

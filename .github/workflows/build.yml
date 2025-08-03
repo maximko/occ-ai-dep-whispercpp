@@ -15,7 +15,6 @@ concurrency:
   cancel-in-progress: "${{ github.ref != 'refs/heads/main' }}"
 
 jobs:
-
   BuildWindows:
     runs-on: "windows-2022"
 
@@ -39,37 +38,51 @@ jobs:
       - name: "Checkout"
         uses: "actions/checkout@v4"
 
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}-Windows-${{ matrix.accel }}
-
-      # - name: Install CUDA Toolkit
-      #   if: ${{ matrix.accel == 'cuda' }}
-      #   id: cuda-toolkit
-      #   uses: Jimver/cuda-toolkit@v0.2.21
-      #   with:
-      #     cuda: '12.5.1'
-      #     sub-packages: '["cudart", "nvcc", "cublas", "cublas_dev", "visual_studio_integration"]'
-      #     method: 'network'
-      - name: Setup CUDA Toolkit
+      - name: Install CUDA Toolkit
         if: ${{ matrix.accel == 'cuda' }}
         id: cuda-toolkit
-        shell: pwsh
-        run: ./setup_cuda.ps1
-        env:
-            INPUT_CUDA_VERSION: '12.5.1'
+        uses: Jimver/cuda-toolkit@v0.2.16
+        with:
+          cuda: '12.5.0'
+          sub-packages: '["cudart", "nvcc", "cublas", "cublas_dev", "visual_studio_integration"]'
 
       - name: Set CUDA_TOOLKIT_ROOT_DIR if CUDA is installed
         if: ${{ matrix.accel == 'cuda' }}
         run: |
           "CUDA_TOOLKIT_ROOT_DIR=$env:CUDA_PATH" >> $env:GITHUB_ENV
 
+      - name: Install hipBLAS
+        id: depends-hipblas
+        if: ${{ matrix.accel == 'hipblas' }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          write-host "Downloading AMD HIP SDK Installer"
+          Invoke-WebRequest -Uri "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-Win10-Win11-For-HIP.exe" -OutFile "${env:RUNNER_TEMP}\rocm-install.exe"
+          write-host "Installing AMD HIP SDK"
+          Start-Process "${env:RUNNER_TEMP}\rocm-install.exe" -ArgumentList '-install' -NoNewWindow -Wait
+          write-host "Completed AMD HIP SDK installation"
+
       - name: Verify ROCm
         id: verify-hipblas
         if: ${{ matrix.accel == 'hipblas' }}
         run: |
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
+
+      - name: Prepare hipBLAS environment
+        id: prepare-hipblas
+        if: ${{ matrix.accel == 'hipblas' }}
+        run: |
+          "HIP_PATH=$(Resolve-Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | split-path | split-path)" >> $env:GITHUB_ENV
+
+      - name: "Install Vulkan SDK"
+        if: ${{ matrix.accel == 'vulkan' }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          write-host "Downloading Vulkan SDK"
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe" -OutFile "${env:RUNNER_TEMP}\VulkanSDK-1.3.296.0-Installer.exe"
+          write-host "Installing Vulkan SDK"
+          Start-Process "${env:RUNNER_TEMP}\VulkanSDK-1.3.296.0-Installer.exe" -ArgumentList '--accept-licenses --default-answer --confirm-command install' -NoNewWindow -Wait
+          write-host "Completed Vulkan SDK installation"
 
       - name: "Run Build-Windows.ps1"
         run: "./Build-Windows.ps1 -Version ${{ steps.get-version.outputs.version }}"
