@@ -54,6 +54,8 @@ if(WIN32)
     set(WHISPER_ADDITIONAL_ENV "")
     set(WHISPER_ADDITIONAL_CMAKE_ARGS -DGGML_CUDA=ON
                                       -DCMAKE_CUDA_ARCHITECTURES=all)
+                                      -DGGML_AVX2=OFF
+                                      -DGGML_BMI2=OFF
     set(WHISPER_CMAKE_GENERATOR ${CMAKE_GENERATOR})
   elseif(WHISPERCPP_WITH_VULKAN)
     if(NOT DEFINED ENV{VULKAN_SDK_PATH})

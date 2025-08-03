@@ -15,94 +15,6 @@ concurrency:
   cancel-in-progress: "${{ github.ref != 'refs/heads/main' }}"
 
 jobs:
-  BuildMac:
-    runs-on: "macos-latest"
-
-    strategy:
-      matrix:
-        config:
-          - "Release"
-        architecture: [x86_64, arm64]
-
-    defaults:
-      run:
-        shell: "bash"
-
-    steps:
-      - name: "Get version"
-        run: |
-          if [[ $GITHUB_REF =~ ^refs/tags/ ]]
-          then version="${GITHUB_REF#refs/tags/}"
-          else version=main
-          fi
-          printf "version=%s" "$version" > "$GITHUB_OUTPUT"
-        id: "get-version"
-
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-        with:
-          key: ${{ github.job }}-MacOS-${{ matrix.architecture }}
-
-      - name: "Checkout"
-        uses: "actions/checkout@v4"
-
-      - name: "Run build-macos.sh"
-        run: "./build-macos.sh ${{ steps.get-version.outputs.version }}"
-        env:
-          MACOS_ARCH: ${{ matrix.architecture }}
-
-      - name: "Upload artifact"
-        uses: "actions/upload-artifact@v4"
-        with:
-          name: "whispercpp-macos-${{ matrix.architecture }}"
-          path: "*.tar.gz"
-
-  BuildLinux:
-    runs-on: "ubuntu-22.04"
-
-    strategy:
-      matrix:
-        config:
-          - "Release"
-        accel: [cpu, vulkan]
-
-    defaults:
-      run:
-        shell: "bash"
-
-    steps:
-      - name: "Get version"
-        run: |
-          if [[ $GITHUB_REF =~ ^refs/tags/ ]]
-          then version="${GITHUB_REF#refs/tags/}"
-          else version=main
-          fi
-          printf "version=%s" "$version" > "$GITHUB_OUTPUT"
-        id: "get-version"
-
-      - name: "Checkout"
-        uses: "actions/checkout@v4"
-
-      - name: "Install Vulkan SDK"
-        if: ${{ matrix.accel == 'vulkan' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y wget
-          wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo tee /etc/apt/trusted.gpg.d/lunarg.asc
-          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-jammy.list http://packages.lunarg.com/vulkan/lunarg-vulkan-jammy.list
-          sudo apt update
-          sudo apt install vulkan-sdk
-
-      - name: "Run build-linux.sh"
-        run: "chmod +x build-linux.sh && ./build-linux.sh ${{ matrix.config }} ${{ steps.get-version.outputs.version }}"
-        env:
-          BUILD_WITH_ACCEL: ${{ matrix.accel }}
-          LINUX_ARCH: "x86_64"
-
-      - uses: "actions/upload-artifact@v4"
-        with:
-          name: "whispercpp-linux-${{ matrix.config }}-${{ matrix.accel }}"
-          path: "*.tar.gz"
 
   BuildWindows:
     runs-on: "windows-2022"
@@ -111,7 +23,7 @@ jobs:
       matrix:
         config:
           - "Release"
-        accel: [cpu, cuda, vulkan, hipblas]
+        accel: [cuda]
 
     steps:
       - name: "Get version"
@@ -153,38 +65,11 @@ jobs:
         run: |
           "CUDA_TOOLKIT_ROOT_DIR=$env:CUDA_PATH" >> $env:GITHUB_ENV
 
-      - name: Install hipBLAS
-        id: depends-hipblas
-        if: ${{ matrix.accel == 'hipblas' }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          write-host "Downloading AMD HIP SDK Installer"
-          Invoke-WebRequest -Uri "https://download.amd.com/developer/eula/rocm-hub/AMD-Software-PRO-Edition-24.Q3-Win10-Win11-For-HIP.exe" -OutFile "${env:RUNNER_TEMP}\rocm-install.exe"
-          write-host "Installing AMD HIP SDK"
-          Start-Process "${env:RUNNER_TEMP}\rocm-install.exe" -ArgumentList '-install' -NoNewWindow -Wait
-          write-host "Completed AMD HIP SDK installation"
-
       - name: Verify ROCm
         id: verify-hipblas
         if: ${{ matrix.accel == 'hipblas' }}
         run: |
           & 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' --version
-
-      - name: Prepare hipBLAS environment
-        id: prepare-hipblas
-        if: ${{ matrix.accel == 'hipblas' }}
-        run: |
-          "HIP_PATH=$(Resolve-Path 'C:\Program Files\AMD\ROCm\*\bin\clang.exe' | split-path | split-path)" >> $env:GITHUB_ENV
-
-      - name: "Install Vulkan SDK"
-        if: ${{ matrix.accel == 'vulkan' }}
-        run: |
-          $ErrorActionPreference = "Stop"
-          write-host "Downloading Vulkan SDK"
-          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/VulkanSDK-1.3.296.0-Installer.exe" -OutFile "${env:RUNNER_TEMP}\VulkanSDK-1.3.296.0-Installer.exe"
-          write-host "Installing Vulkan SDK"
-          Start-Process "${env:RUNNER_TEMP}\VulkanSDK-1.3.296.0-Installer.exe" -ArgumentList '--accept-licenses --default-answer --confirm-command install' -NoNewWindow -Wait
-          write-host "Completed Vulkan SDK installation"
 
       - name: "Run Build-Windows.ps1"
         run: "./Build-Windows.ps1 -Version ${{ steps.get-version.outputs.version }}"
@@ -201,8 +86,6 @@ jobs:
     if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
 
     needs:
-      - "BuildMac"
-      - "BuildLinux"
       - "BuildWindows"
 
     permissions:
